@@ -99,6 +99,90 @@ const CASES = {
       "Private schools",
       "State governments that pay for schools"
     ]
+  },
+  "se-smack": {
+    "title": "Discipline at home",
+    "country": "Sweden",
+    "year": "1979",
+    "brief": "In the 1970s, many Swedish parents still believed smacking was a normal way to discipline children. Doctors, teachers and children's rights groups said hitting children could cause harm, and that children, like adults, should be protected from violence. But many parents worried that the state was interfering in family life.",
+    "who": [
+      "Children",
+      "Parents",
+      "Teachers and doctors",
+      "Social workers and police"
+    ]
+  },
+  "ie-smoke": {
+    "title": "Smoke in the pub",
+    "country": "Ireland",
+    "year": "2004",
+    "brief": "Tobacco smoke in pubs, restaurants and offices harmed workers such as bar staff, who breathed it for hours every shift. But many pub owners feared that customers would stay home, and some smokers said it should be their own choice.",
+    "who": [
+      "Bar and restaurant workers",
+      "Pub owners",
+      "Smokers",
+      "Customers who don't smoke"
+    ]
+  },
+  "ca-lang": {
+    "title": "Two languages, one country",
+    "country": "Canada",
+    "year": "1969",
+    "brief": "Roughly a quarter of Canadians spoke French as their first language, but most federal government services and jobs worked mainly in English. French speakers, especially in Quebec, felt treated as second-class citizens, and tensions were growing.",
+    "who": [
+      "French speakers",
+      "English speakers",
+      "Federal government workers",
+      "Newcomers learning a language"
+    ]
+  },
+  "no-boards": {
+    "title": "Who sits on the board?",
+    "country": "Norway",
+    "year": "2003",
+    "brief": "In the early 2000s, only about 6% of the board members of large Norwegian companies were women, even though many women were highly qualified. Companies had been asked to improve voluntarily, but very little changed.",
+    "who": [
+      "Women professionals",
+      "Company owners and shareholders",
+      "Current board members",
+      "Workers and customers"
+    ]
+  },
+  "kr-games": {
+    "title": "Late-night gaming",
+    "country": "South Korea",
+    "year": "2011",
+    "brief": "Many South Korean teenagers were playing online games late into the night, and worries grew about tiredness, falling grades and gaming addiction. Some parents wanted help. Game companies and many teenagers said a ban would be unfair, and that parents, not the government, should decide.",
+    "who": [
+      "Teenagers",
+      "Parents",
+      "Game companies",
+      "Schools and teachers"
+    ]
+  },
+  "de-pfand": {
+    "title": "Cans on the street",
+    "country": "Germany",
+    "year": "2003",
+    "brief": "In Germany, more and more drinks were sold in throw-away cans and plastic bottles instead of reusable ones. Litter appeared in parks, on streets and beside rivers. Recycling was happening, but too many containers were still thrown away.",
+    "who": [
+      "Shoppers",
+      "Shops and drinks companies",
+      "Cities and recycling workers",
+      "People who collect bottles for money"
+    ]
+  },
+  "bt-forest": {
+    "title": "Keeping the forests",
+    "country": "Bhutan",
+    "year": "2008",
+    "brief": "Bhutan is a small mountain country whose people depend on forests for firewood, farming, water and tourism. As the economy grew, roads, farms and towns were expanding, and leaders worried that the forests could shrink for good.",
+    "who": [
+      "Farmers and villagers",
+      "Businesses and builders",
+      "Wildlife",
+      "Future generations"
+    ]
   }
 };
 
