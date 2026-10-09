@@ -1122,7 +1122,7 @@ const getSample = () => (samplePromise ||= (window.claude && window.claude.use ?
 async function gradeWithServer(sc, text) {
   const res = await fetch(GRADER_URL.replace(/\/+$/, "") + "/grade", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ caseId: sc.id, answer: text })
+    body: JSON.stringify({ caseId: sc.id, answer: text, player: S.server || undefined })
   });
   const body = await res.json().catch(() => null);
   if (!res.ok || !body) throw { code: res.status === 429 ? "rate_limited" : "server", message: body && body.error };
@@ -1178,15 +1178,23 @@ Reply with ONLY this JSON:
       || (e && e.code === "server" && e.message ? e.message : null);
     grading = { id: sc.id, error: msg || "Something went wrong while grading. Your draft is saved, so you can submit again in a moment." };
   }
+  if (lbMode && mode === "server") fetchBoard();
   if (current === "lab" && labView.id === sc.id) { renderLab(); } else upd();
 }
 
 // ---------- Leaderboard (shared) ----------
-let db = null, userNs = null, myId = null, players = [], lbMode = "rules", lbStatus = "connecting", unsub = null;
+// On claude.ai the leaderboard uses the artifact's shared database ("claude" mode).
+// Anywhere else it uses the Lex Atlas server at GRADER_URL ("server" mode).
+let db = null, userNs = null, myId = null, players = [], lbMode = "rules", lbStatus = "connecting", unsub = null, mode = null;
 async function initRemote() {
-  if (!(window.claude && window.claude.use)) { lbStatus = "off"; if (current === "lb") renderLb(); return; }
-  try { [db, userNs] = await Promise.all([window.claude.use("db"), window.claude.use("user")]); } catch (e) {}
-  if (!db || !userNs) { lbStatus = "off"; if (current === "lb") renderLb(); return; }
+  if (window.claude && window.claude.use) {
+    try { [db, userNs] = await Promise.all([window.claude.use("db"), window.claude.use("user")]); } catch (e) {}
+  }
+  if (!db || !userNs) {
+    if (GRADER_URL) return initServerBoard();
+    lbStatus = "off"; if (current === "lb") renderLb(); return;
+  }
+  mode = "claude";
   myId = await userNs.id().catch(() => null);
   lbStatus = "on";
   unsub = db.collection("players").onSnapshot(snap => {
@@ -1197,8 +1205,51 @@ async function initRemote() {
   if (current === "lb") renderLb();
   syncRemote();
 }
+const API = path => GRADER_URL.replace(/\/+$/, "") + path;
+async function api(path, body) {
+  const res = await fetch(API(path), body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) throw { status: res.status, message: (data && data.error) || "The leaderboard server didn't respond." };
+  return data;
+}
+function initServerBoard() {
+  mode = "server";
+  myId = S.server ? S.server.id : null;
+  S.joined = !!S.server;
+  fetchBoard();
+  // Refresh every 30 seconds while the leaderboard is on screen.
+  setInterval(() => { if (current === "lb" && !document.hidden) fetchBoard(); }, 30000);
+  syncRemote();
+}
+let fetching = false;
+async function fetchBoard() {
+  if (mode !== "server" || fetching) return;
+  fetching = true;
+  try {
+    const data = await api("/leaderboard?sort=" + (lbMode === "explore" ? "explore" : "rules"));
+    players = Array.isArray(data.players) ? data.players : [];
+    lbStatus = "on";
+  } catch (e) { if (lbStatus !== "on") lbStatus = "error"; }
+  fetching = false;
+  if (current === "lb") renderLb();
+}
+async function joinServer(nick) {
+  const r = await api("/join", { nick, xp: S.xp, countries: conqueredCount() });
+  S.server = { id: r.id, token: r.token };
+  S.nick = r.nick; S.joined = true; myId = r.id;
+  save(); fetchBoard();
+}
 let syncing = false, syncAgain = false;
 async function syncRemote() {
+  if (mode === "server") {
+    if (!S.server) return;
+    if (syncing) { syncAgain = true; return; }
+    syncing = true;
+    try { await api("/progress", { id: S.server.id, token: S.server.token, xp: S.xp, countries: conqueredCount() }); } catch (e) {}
+    syncing = false;
+    if (syncAgain) { syncAgain = false; syncRemote(); }
+    return;
+  }
   if (!db || !myId || !S.joined || !S.nick) return;
   if (syncing) { syncAgain = true; return; }
   syncing = true;
@@ -1214,12 +1265,12 @@ function renderLb() {
     el("h2", { text: lbMode === "rules" ? "Top lawmakers" : "Top explorers" }),
     el("p", { class: "muted", text: lbMode === "rules" ? "Ranked by Lawmaker points: your best AI judge score on each Rule Lab case, added up." : "Ranked by countries conquered, then XP." })),
     el("div", { class: "seg", role: "group", "aria-label": "Leaderboard type" },
-      el("button", { "aria-pressed": String(lbMode === "rules"), text: "Lawmakers", onclick: () => { lbMode = "rules"; renderLb(); } }),
-      el("button", { "aria-pressed": String(lbMode === "explore"), text: "Explorers", onclick: () => { lbMode = "explore"; renderLb(); } }))));
+      el("button", { "aria-pressed": String(lbMode === "rules"), text: "Lawmakers", onclick: () => { lbMode = "rules"; renderLb(); fetchBoard(); } }),
+      el("button", { "aria-pressed": String(lbMode === "explore"), text: "Explorers", onclick: () => { lbMode = "explore"; renderLb(); fetchBoard(); } }))));
 
   if (lbStatus === "off" || lbStatus === "error") {
     p.append(el("div", { class: "card" }, el("h3", { text: "The shared leaderboard isn't available here" }),
-      el("p", { class: "muted", text: "Open Lex Atlas on claude.ai while signed in to join. Your progress is still saved on this device." }),
+      el("p", { class: "muted", text: mode === "server" ? "Couldn't reach the leaderboard. Check your internet connection and try again in a minute. Your progress is still saved on this device." : "Open Lex Atlas on claude.ai while signed in to join. Your progress is still saved on this device." }),
       el("p", { class: "num", text: `Your scores: ${rulePoints()} Lawmaker points · ${conqueredCount()} countries · ${S.xp} XP` })));
     return;
   }
@@ -1228,16 +1279,24 @@ function renderLb() {
   if (!S.joined) {
     const inp = el("input", { type: "text", id: "nick", maxlength: "16", placeholder: "e.g. JusticeFox42", autocomplete: "off", value: S.nick || "" });
     const msg = el("p", { class: "note", text: "3 to 16 letters, numbers or underscores. Don't use your real name." });
-    const join = () => {
+    const btn = el("button", { class: "btn go", text: "Join" });
+    const join = async () => {
       const v = inp.value.trim();
       if (!/^[A-Za-z0-9_]{3,16}$/.test(v)) { msg.textContent = "Use 3 to 16 letters, numbers or underscores, with no spaces."; msg.style.color = "var(--bad)"; return; }
       if (players.some(pl => pl.id !== myId && String(pl.nick).toLowerCase() === v.toLowerCase())) { msg.textContent = "That nickname is taken. Try another."; msg.style.color = "var(--bad)"; return; }
+      if (mode === "server") {
+        btn.disabled = true; msg.textContent = "Joining…"; msg.style.color = "";
+        try { await joinServer(v); } catch (e) { btn.disabled = false; msg.textContent = e.message || "Couldn't join. Try again."; msg.style.color = "var(--bad)"; return; }
+        renderLb(); toast("You're on the leaderboard"); return;
+      }
       S.nick = v; S.joined = true; save(); renderLb(); toast("You're on the leaderboard");
     };
+    btn.addEventListener("click", join);
     inp.addEventListener("keydown", e => { if (e.key === "Enter") join(); });
     p.append(el("div", { class: "card" }, el("h3", { text: "Join with a nickname" }),
       el("p", { class: "muted", text: "Only your nickname and scores are shared. Your rule text never is." }),
-      el("div", { class: "row" }, inp, el("button", { class: "btn go", text: "Join", onclick: join })), msg));
+      el("div", { class: "row" }, inp, btn), msg,
+      mode === "server" ? el("p", { class: "note", text: "Lawmaker points count rules the AI judge grades after you join. Your progress is saved in this browser, so play on the same device to keep your place." }) : null));
   } else if (lbStatus === "readonly") {
     p.append(el("p", { class: "note", text: "You can view this leaderboard, but your access doesn't allow posting scores." }));
   }
