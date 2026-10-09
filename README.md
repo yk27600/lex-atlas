@@ -1,49 +1,59 @@
 # Lex Atlas
 
-A law and politics game for kids and students. Players conquer a world map by learning how each country is governed, write their own rules for real problems in the Rule Lab, and spot the fake law in a daily challenge.
+A law and politics game for kids and students. Players conquer a world map by learning how each country is governed, write their own rules for real problems in the Rule Lab (graded by an AI judge), and spot the fake law in a daily challenge.
 
-The whole game is a single file: `index.html`. There's no build step and nothing to install.
+- **Play:** https://yk27600.github.io/lex-atlas/
+- **claude.ai version:** https://claude.ai/artifact/TGkd4sPvam42NHYt4aRW4L (same game; it has its own separate leaderboard)
 
-## Play it
+## Files
 
-- **On claude.ai (all features):** https://claude.ai/artifact/TGkd4sPvam42NHYt4aRW4L
-  The AI judge and the shared leaderboard only work here, for signed-in viewers.
-- **On your own website (GitHub Pages):** the World map, lessons, quizzes and Daily challenge all work. The Rule Lab shows a message that the AI judge isn't available, and the leaderboard shows only your own scores.
-- **Offline:** double-click `index.html` to open it in any browser.
+| File | What it is | Where it runs |
+|---|---|---|
+| `index.html` | The whole game | GitHub Pages |
+| `worker.js` | The server: AI judge and leaderboard | Cloudflare Worker `lex-atlas-judge` |
+| `SETUP-AI-JUDGE.md` | How the Cloudflare server was set up | |
 
-Progress (stamps, XP, streak) is saved in the browser you play in, so it doesn't carry between devices.
+No secrets are stored in this repository. The OpenRouter key lives only in Cloudflare.
 
-## Put it on GitHub Pages (free, about 5 minutes)
+## How it fits together
 
-1. Sign in at https://github.com (or create a free account).
-2. Click **+** (top right), then **New repository**. Name it `lex-atlas`, choose **Public**, and click **Create repository**.
-3. On the new repo page, click **uploading an existing file**. Drag in `index.html` and `README.md`, then click **Commit changes**.
-4. Go to **Settings**, then **Pages**. Under "Branch", pick **main** and **/ (root)**, then click **Save**.
-5. After a minute or two, your game is live at `https://<your-username>.github.io/lex-atlas/`.
+- **GitHub Pages** serves `index.html`.
+- **Cloudflare Worker** (`https://lex-atlas-judge.yik9097.workers.dev`) runs `worker.js`:
+  - `POST /grade` sends a student's rule to a free OpenRouter model and returns scores
+  - `POST /join`, `POST /progress` and `GET /leaderboard` run the leaderboard
+- **Cloudflare D1 database** `lex-atlas-leaderboard` stores nicknames and scores. It's bound to the Worker as `DB`.
+- **Cloudflare secret** `OPENROUTER_API_KEY` holds the OpenRouter key.
 
-To update the game later, upload a new `index.html` to the same repo. The site refreshes on its own.
+Player progress (stamps, XP, streak) is saved in each player's browser. Lawmaker points are recorded by the server, so they can't be faked.
+
+## Updating
+
+- **The game:** edit `index.html` and upload it here (Add file > Upload files > Commit changes). The site updates in a minute or two.
+- **The server:** edit `worker.js`, then in Cloudflare open the Worker, click **Edit code**, replace everything with the new code and click **Deploy**. Upload the new `worker.js` here too, so the copy stays current.
 
 ## Where things are in index.html
-
-Everything is in the `<script>` near the bottom of the file:
 
 | What | Look for |
 |---|---|
 | Country lessons and quizzes (24 countries) | `const LESSONS = {` |
-| Rule Lab cases | `const SCENARIOS = [` |
-| Daily challenge laws (real and fake) | `const REALS = [` and `const FAKES = [` |
-| All 195 countries and their map tile positions | `const COUNTRY_ROWS` and `const POS` |
-| AI judge prompt and scoring | `async function gradeRule` |
-| Leaderboard | `async function initRemote` and `function renderLb` |
+| Rule Lab cases | `const SCENARIOS = [` (also copy changes to `CASES` in `worker.js`) |
+| Daily challenge laws | `const REALS = [` and `const FAKES = [` |
+| All 195 countries and map tile positions | `const COUNTRY_ROWS` and `const POS` |
+| Server address | `const GRADER_URL` |
 | Colours and fonts | the `:root {` block at the top of the `<style>` |
 
-To add a country, copy one entry in `LESSONS` (for example `SG: { ... }`), change the two-letter code to the country's code from `COUNTRY_ROWS`, and rewrite the lessons and questions. Its map tile turns blue automatically.
+To add a country, copy one entry in `LESSONS` (for example `SG: { ... }`), change the code to the country's two-letter code from `COUNTRY_ROWS`, and rewrite the lessons and questions. Its map tile turns blue automatically.
 
-## Making the AI judge and leaderboard work everywhere
+## Managing the leaderboard
 
-Outside claude.ai, these need a small server of your own: one endpoint that sends the student's rule to the Anthropic API (using your API key, which you pay for per grade), and a database for leaderboard scores. Never put an API key inside `index.html`, because anyone could copy it.
+In Cloudflare, open **Storage & databases > D1 SQL Database > lex-atlas-leaderboard > Console**. To remove a player:
+
+```sql
+DELETE FROM grades WHERE player_id IN (SELECT id FROM players WHERE nick = 'NICKNAME'); DELETE FROM players WHERE nick = 'NICKNAME';
+```
 
 ## Before real students use it
 
 - Have a teacher or law student fact-check the lessons and daily-challenge laws.
-- If players are under 13, check children's privacy laws (COPPA in the US, GDPR-K and the UK Children's Code, PDPA in Singapore) before collecting any data.
+- Free AI models may log what's sent to them. Before children use the Rule Lab, switch `MODEL` to a paid model from a provider that doesn't keep data, and add a privacy notice.
+- If players are under 13, check children's privacy laws (COPPA in the US, GDPR-K and the UK Children's Code, PDPA in Singapore).
