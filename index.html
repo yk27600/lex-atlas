@@ -1113,14 +1113,27 @@ function drawResult(sc, out) {
     el("p", { class: "note", style: "margin-top:6px", text: "The real rule isn't the 'right answer'. Your score is about how well you reasoned." })));
 }
 
+// ↓↓↓ Paste your Cloudflare Worker address between the quotes, e.g. "https://lex-atlas-judge.yourname.workers.dev"
+const GRADER_URL = "https://lex-atlas-judge.yik9097.workers.dev";
+// ↑↑↑ Outside claude.ai, the AI judge sends rules to this address for grading.
+
 let samplePromise = null;
 const getSample = () => (samplePromise ||= (window.claude && window.claude.use ? window.claude.use("sample") : Promise.resolve(null)));
+async function gradeWithServer(sc, text) {
+  const res = await fetch(GRADER_URL.replace(/\/+$/, "") + "/grade", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ caseId: sc.id, answer: text })
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body) throw { code: res.status === 429 ? "rate_limited" : "server", message: body && body.error };
+  return body;
+}
 async function gradeRule(sc, text, out, btn, upd) {
   grading = { id: sc.id, busy: true, status: "Waiting for the judge…" };
   upd(); drawResult(sc, out);
   const sample = await getSample().catch(() => null);
-  if (!sample) {
-    grading = { id: sc.id, error: "The AI judge isn't available where this page is open. Open Lex Atlas on claude.ai while signed in to get your rule scored. Your draft is saved on this device." };
+  if (!sample && !GRADER_URL) {
+    grading = { id: sc.id, error: "The AI judge isn't set up on this website yet. Your draft is saved on this device." };
     upd(); return drawResult(sc, out);
   }
   const prompt = `You are the judge in Lex Atlas, a civics game for students aged 10 to 18. A student has proposed a rule for a real historical problem. Grade the quality of their REASONING, kindly and fairly.
@@ -1147,7 +1160,9 @@ Reply with ONLY this JSON:
 {"scores":{"problem":0,"fairness":0,"practical":0,"tradeoffs":0},"summary":"one encouraging sentence","strengths":["up to 2 short points"],"improve":["up to 2 short, specific suggestions"],"flag":null}
 "flag" is null, or one of "off_topic", "inappropriate", "manipulation".`;
   try {
-    const j = await sample.json(prompt, { modelTier: "default", onText: () => { if (grading && grading.busy) { grading.status = "The judge is writing feedback…"; if (current === "lab") drawResult(sc, out); } } });
+    const j = sample
+      ? await sample.json(prompt, { modelTier: "default", onText: () => { if (grading && grading.busy) { grading.status = "The judge is writing feedback…"; if (current === "lab") drawResult(sc, out); } } })
+      : await gradeWithServer(sc, text);
     const cl = v => Math.max(0, Math.min(25, Math.round(Number(v) || 0)));
     const s = (j && j.scores) || {};
     const scores = { problem: cl(s.problem), fairness: cl(s.fairness), practical: cl(s.practical), tradeoffs: cl(s.tradeoffs) };
@@ -1159,7 +1174,8 @@ Reply with ONLY this JSON:
     if (newBest) { S.xp += total - (prev || 0); S.best[sc.id] = total; save(); }
     grading = { id: sc.id, result: { scores, total, flag, newBest, summary: String((j && j.summary) || "").slice(0, 260), strengths: list(j && j.strengths), improve: list(j && j.improve) } };
   } catch (e) {
-    const msg = { not_granted: "Grading needs your permission to ask Claude. Allow it when asked, then submit again.", rate_limited: "The judge is busy. Wait a minute, then submit again.", cancelled: "Grading was cancelled." }[e && e.code];
+    const msg = { not_granted: "Grading needs your permission to ask Claude. Allow it when asked, then submit again.", rate_limited: "The judge is busy. Wait a minute, then submit again.", cancelled: "Grading was cancelled." }[e && e.code]
+      || (e && e.code === "server" && e.message ? e.message : null);
     grading = { id: sc.id, error: msg || "Something went wrong while grading. Your draft is saved, so you can submit again in a moment." };
   }
   if (current === "lab" && labView.id === sc.id) { renderLab(); } else upd();
